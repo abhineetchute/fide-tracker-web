@@ -56,56 +56,83 @@ const PALETTE = [
 ];
 
 // ---------------------------------------------------------------------------
-// Data bug fix: resolve one canonical player per search term
+// Classify each search term as numeric (FIDE ID lookup) or textual (ilike)
+// ---------------------------------------------------------------------------
+function isNumericTerm(term: string): boolean {
+  return /^\d+$/.test(term.trim());
+}
+
+// ---------------------------------------------------------------------------
+// Resolve one canonical player per search term.
 //
-// For each term (e.g. "Pragg"), collect all matching player names, then keep
-// only the one whose single highest historical rating is the greatest.
-// This discards lower-rated partial matches (e.g. Spraggett, Kevin).
+// Fix 1 — group by fide_id, NOT by name:
+//   A player whose name changed over time (e.g. "Vaishali R" →
+//   "Vaishali Rameshbabu") will have multiple distinct name strings in the
+//   DB but a single fide_id. Grouping by fide_id merges those rows into one
+//   continuous timeline. The most recent name for that fide_id is used as
+//   the display label.
+//
+// Fix 2 — Pragg / Spraggett disambiguation:
+//   For name-based terms, collect all matching fide_ids, then keep only the
+//   one whose peak historical rating is greatest.
 // ---------------------------------------------------------------------------
 function resolveCanonicalPlayers(
   rows: PlayerRating[],
   searchTerms: string[]
 ): ResolvedPlayer[] {
-  // Group all rows by canonical player name
-  const byName = new Map<string, PlayerRating[]>();
+  // ── Step 1: group ALL returned rows by fide_id ──────────────────────────
+  const byId = new Map<number, PlayerRating[]>();
   for (const row of rows) {
-    const bucket = byName.get(row.name) ?? [];
+    const bucket = byId.get(row.fide_id) ?? [];
     bucket.push(row);
-    byName.set(row.name, bucket);
+    byId.set(row.fide_id, bucket);
+  }
+
+  // Helper: derive display name = name from the most recent row for that id
+  function displayName(playerRows: PlayerRating[]): string {
+    return [...playerRows].sort((a, b) => b.date.localeCompare(a.date))[0]
+      .name;
   }
 
   const resolved: ResolvedPlayer[] = [];
-  const usedNames = new Set<string>();
+  const usedIds = new Set<number>();
 
   for (const term of searchTerms) {
-    const lc = term.toLowerCase();
+    const numeric = isNumericTerm(term);
 
-    // Find all player names that match this term
-    const candidates: { name: string; peakRating: number }[] = [];
-    for (const [name, playerRows] of byName.entries()) {
-      if (name.toLowerCase().includes(lc)) {
+    // ── Step 2: collect candidate fide_ids that match this term ───────────
+    const candidates: { fide_id: number; peakRating: number }[] = [];
+
+    for (const [fide_id, playerRows] of byId.entries()) {
+      const matches = numeric
+        ? fide_id === Number(term)                          // exact FIDE ID
+        : playerRows.some((r) =>                            // name ilike
+            r.name.toLowerCase().includes(term.toLowerCase())
+          );
+
+      if (matches) {
         const peak = Math.max(...playerRows.map((r) => r.rating));
-        candidates.push({ name, peakRating: peak });
+        candidates.push({ fide_id, peakRating: peak });
       }
     }
 
     if (!candidates.length) continue;
 
-    // Keep only the highest-rated match
+    // ── Step 3: keep only the highest-rated candidate (Pragg fix) ─────────
     candidates.sort((a, b) => b.peakRating - a.peakRating);
-    const winner = candidates[0];
+    const { fide_id: winnerId } = candidates[0];
 
-    // Deduplicate across terms (two terms → same canonical player)
-    if (usedNames.has(winner.name)) continue;
-    usedNames.add(winner.name);
+    // Deduplicate across search terms
+    if (usedIds.has(winnerId)) continue;
+    usedIds.add(winnerId);
 
-    const sortedRows = (byName.get(winner.name) ?? []).sort((a, b) =>
+    const sortedRows = (byId.get(winnerId) ?? []).sort((a, b) =>
       a.date.localeCompare(b.date)
     );
 
     resolved.push({
-      name: winner.name,
-      fide_id: sortedRows[0]?.fide_id ?? 0,
+      name: displayName(sortedRows),
+      fide_id: winnerId,
       rows: sortedRows,
     });
   }
@@ -353,14 +380,18 @@ export default function HomePage() {
     setHasSearched(true);
 
     try {
-      const ilikeFilter = terms.map((n) => `name.ilike.%${n}%`).join(",");
+      // Route each term: purely numeric → fide_id exact match, else → name ilike
+      const filterParts = terms.map((t) =>
+        isNumericTerm(t) ? `fide_id.eq.${t}` : `name.ilike.%${t}%`
+      );
+      const orFilter = filterParts.join(",");
 
       const { data, error: sbError } = await supabase
         .from("player_ratings")
         .select(
           "fide_id,name,fed,sex,rating,world_rank,national_rank,world_women_rank,national_women_rank,date"
         )
-        .or(ilikeFilter)
+        .or(orFilter)
         .order("date", { ascending: true });
 
       if (sbError) throw new Error(sbError.message);
@@ -452,7 +483,7 @@ export default function HomePage() {
           </h1>
 
           {/* Subtitle */}
-          <p className="text-[#2e2e2e] text-xs font-mono tracking-[0.22em] uppercase">
+          <p className="text-[#666] text-xs font-mono tracking-[0.22em] uppercase">
             Tracking historical classical records from January 2018.
           </p>
         </header>
@@ -461,7 +492,7 @@ export default function HomePage() {
         {/* Search bar                                                        */}
         {/* ---------------------------------------------------------------- */}
         <section className="mb-12">
-          <label className="block text-xs font-mono text-[#555] tracking-[0.2em] uppercase mb-3">
+          <label className="block text-xs font-mono text-[#777] tracking-[0.2em] uppercase mb-3">
             Players — comma-separated
           </label>
           <div className="flex gap-3 items-stretch">
@@ -470,7 +501,7 @@ export default function HomePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Gukesh D, Praggnanandhaa R, Carlsen M"
+              placeholder="Gukesh D, Praggnanandhaa R, 5202213"
               className="flex-1 bg-[#111] border border-[#222] rounded-xl px-5 py-4 text-white text-sm placeholder-[#2e2e2e] focus:outline-none focus:border-[#F5C542]/50 focus:ring-1 focus:ring-[#F5C542]/20 transition-all font-mono"
             />
             <button
@@ -512,7 +543,7 @@ export default function HomePage() {
         {/* Empty state                                                       */}
         {/* ---------------------------------------------------------------- */}
         {hasSearched && !loading && !error && players.length === 0 && (
-          <div className="text-center py-24 text-[#252525] font-mono text-xs tracking-[0.3em] uppercase">
+          <div className="text-center py-24 text-[#444] font-mono text-xs tracking-[0.3em] uppercase">
             No players found — try a shorter name fragment.
           </div>
         )}
@@ -523,10 +554,10 @@ export default function HomePage() {
         {players.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center gap-3 mb-6">
-              <span className="text-xs font-mono text-[#3a3a3a] tracking-[0.2em] uppercase">
+              <span className="text-xs font-mono text-[#666] tracking-[0.2em] uppercase">
                 Elo over time
               </span>
-              <span className="h-px flex-1 bg-[#161616]" />
+              <span className="h-px flex-1 bg-[#1e1e1e]" />
             </div>
 
             <div className="bg-[#0d0d0d] border border-[#181818] rounded-2xl px-6 py-8">
@@ -546,10 +577,10 @@ export default function HomePage() {
         {summaries.length > 0 && (
           <section className="mb-16">
             <div className="flex items-center gap-3 mb-6">
-              <span className="text-xs font-mono text-[#3a3a3a] tracking-[0.2em] uppercase">
+              <span className="text-xs font-mono text-[#666] tracking-[0.2em] uppercase">
                 Player summary
               </span>
-              <span className="h-px flex-1 bg-[#161616]" />
+              <span className="h-px flex-1 bg-[#1e1e1e]" />
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-[#181818]">
@@ -564,7 +595,7 @@ export default function HomePage() {
                     ].map((col, i) => (
                       <th
                         key={col}
-                        className={`px-6 py-4 text-xs font-mono text-[#383838] tracking-[0.14em] uppercase ${
+                        className={`px-6 py-4 text-xs font-mono text-[#666] tracking-[0.14em] uppercase ${
                           i === 0 ? "text-left" : "text-right"
                         }`}
                       >
@@ -593,7 +624,7 @@ export default function HomePage() {
                       </td>
 
                       {/* FIDE ID */}
-                      <td className="px-6 py-5 text-right font-mono text-[#3a3a3a] text-xs">
+                      <td className="px-6 py-5 text-right font-mono text-[#555] text-xs">
                         {s.fide_id}
                       </td>
 
@@ -640,10 +671,10 @@ export default function HomePage() {
         {/* Footer                                                            */}
         {/* ---------------------------------------------------------------- */}
         <footer className="border-t border-[#131313] pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <span className="text-xs font-mono text-[#222] tracking-[0.3em] uppercase">
+          <span className="text-xs font-mono text-[#555] tracking-[0.3em] uppercase">
             FIDE Rating Chronicle
           </span>
-          <span className="text-xs font-mono text-[#2a2a2a] italic">
+          <span className="text-xs font-mono text-[#555] italic">
             &apos;Candidates&apos; coming soon. Hopefully before GTA 6.
           </span>
         </footer>
