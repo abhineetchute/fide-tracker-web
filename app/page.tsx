@@ -64,17 +64,6 @@ function isNumericTerm(term: string): boolean {
 
 // ---------------------------------------------------------------------------
 // Resolve one canonical player per search term.
-//
-// Fix 1 — group by fide_id, NOT by name:
-//   A player whose name changed over time (e.g. "Vaishali R" →
-//   "Vaishali Rameshbabu") will have multiple distinct name strings in the
-//   DB but a single fide_id. Grouping by fide_id merges those rows into one
-//   continuous timeline. The most recent name for that fide_id is used as
-//   the display label.
-//
-// Fix 2 — Pragg / Spraggett disambiguation:
-//   For name-based terms, collect all matching fide_ids, then keep only the
-//   one whose peak historical rating is greatest.
 // ---------------------------------------------------------------------------
 function resolveCanonicalPlayers(
   rows: PlayerRating[],
@@ -104,11 +93,14 @@ function resolveCanonicalPlayers(
     const candidates: { fide_id: number; peakRating: number }[] = [];
 
     for (const [fide_id, playerRows] of byId.entries()) {
+      // FIX: Order-agnostic word matching on the frontend so DB results aren't dropped
       const matches = numeric
-        ? fide_id === Number(term)                          // exact FIDE ID
-        : playerRows.some((r) =>                            // name ilike
-            r.name.toLowerCase().includes(term.toLowerCase())
-          );
+        ? fide_id === Number(term)
+        : playerRows.some((r) => {
+            const nameLower = r.name.toLowerCase();
+            const words = term.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+            return words.every((w) => nameLower.includes(w.toLowerCase()));
+          });
 
       if (matches) {
         const peak = Math.max(...playerRows.map((r) => r.rating));
@@ -156,7 +148,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
     },
     itemStyle: { color: PALETTE[i % PALETTE.length] },
     emphasis: { lineStyle: { width: 3.5 } },
-    // Super GM markLine only on first series to avoid duplication
     ...(i === 0 && {
       markLine: {
         silent: true,
@@ -183,7 +174,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
         data: [{ yAxis: 2700 }],
       },
     }),
-    // ECharts time axis expects [dateString, value]
     data: player.rows.map((r) => [r.date, r.rating]),
   }));
 
@@ -193,9 +183,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
     animationDuration: 800,
     animationEasing: "cubicOut" as const,
 
-    // -----------------------------------------------------------------------
-    // Tooltip
-    // -----------------------------------------------------------------------
     tooltip: {
       trigger: "axis",
       backgroundColor: "#0d0d0d",
@@ -216,7 +203,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
         }[]
       ) => {
         if (!Array.isArray(params) || !params.length) return "";
-        // axisValue is a timestamp string when axis type is "time"
         const raw = params[0].axisValue;
         const label =
           typeof raw === "string" && raw.length >= 7
@@ -239,9 +225,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
       },
     },
 
-    // -----------------------------------------------------------------------
-    // Legend
-    // -----------------------------------------------------------------------
     legend: {
       top: 0,
       right: 0,
@@ -252,9 +235,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
       textStyle: { color: "#4a4a4a", fontSize: 11, fontFamily: "monospace" },
     },
 
-    // -----------------------------------------------------------------------
-    // Grid
-    // -----------------------------------------------------------------------
     grid: {
       top: 44,
       left: 8,
@@ -263,9 +243,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
       containLabel: true,
     },
 
-    // -----------------------------------------------------------------------
-    // Axes
-    // -----------------------------------------------------------------------
     xAxis: {
       type: "time",
       boundaryGap: false,
@@ -301,9 +278,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
       },
     },
 
-    // -----------------------------------------------------------------------
-    // dataZoom — inside (wheel/trackpad) + slider
-    // -----------------------------------------------------------------------
     dataZoom: [
       {
         type: "inside",
@@ -380,26 +354,59 @@ export default function HomePage() {
     setHasSearched(true);
 
     try {
-      // Route each term: purely numeric → fide_id exact match, else → name ilike
-      const filterParts = terms.map((t) =>
-        isNumericTerm(t) ? `fide_id.eq.${t}` : `name.ilike.%${t}%`
+      const numericTerms = terms.filter(isNumericTerm);
+      const textTerms = terms.filter((t) => !isNumericTerm(t));
+
+      function termToWords(term: string): string[] {
+        return term
+          .replace(/,/g, " ")
+          .split(/\s+/)
+          .map((w) => w.trim())
+          .filter(Boolean);
+      }
+
+      let numericRows: PlayerRating[] = [];
+      if (numericTerms.length) {
+        const numericFilter = numericTerms.map((t) => `fide_id.eq.${t}`).join(",");
+        const { data: nd, error: ne } = await supabase
+          .from("player_ratings")
+          .select("fide_id,name,fed,sex,rating,world_rank,national_rank,world_women_rank,national_women_rank,date")
+          .or(numericFilter)
+          .order("date", { ascending: true });
+        if (ne) throw new Error(ne.message);
+        numericRows = (nd ?? []) as PlayerRating[];
+      }
+
+      const textRowSets: PlayerRating[][] = await Promise.all(
+        textTerms.map(async (term) => {
+          const words = termToWords(term);
+          if (!words.length) return [];
+
+          let q = supabase
+            .from("player_ratings")
+            .select("fide_id,name,fed,sex,rating,world_rank,national_rank,world_women_rank,national_women_rank,date");
+
+          for (const word of words) {
+            q = q.ilike("name", `%${word}%`) as typeof q;
+          }
+
+          const { data: td, error: te } = await q.order("date", { ascending: true });
+          if (te) throw new Error(te.message);
+          return (td ?? []) as PlayerRating[];
+        })
       );
-      const orFilter = filterParts.join(",");
 
-      const { data, error: sbError } = await supabase
-        .from("player_ratings")
-        .select(
-          "fide_id,name,fed,sex,rating,world_rank,national_rank,world_women_rank,national_women_rank,date"
-        )
-        .or(orFilter)
-        .order("date", { ascending: true });
+      const seen = new Set<string>();
+      const allRows: PlayerRating[] = [];
+      for (const row of [...numericRows, ...textRowSets.flat()]) {
+        const key = `${row.fide_id}|${row.date}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          allRows.push(row);
+        }
+      }
 
-      if (sbError) throw new Error(sbError.message);
-
-      const resolved = resolveCanonicalPlayers(
-        (data ?? []) as PlayerRating[],
-        terms
-      );
+      const resolved = resolveCanonicalPlayers(allRows, terms);
       setPlayers(resolved);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -435,8 +442,6 @@ export default function HomePage() {
   // -------------------------------------------------------------------------
   return (
     <main className="min-h-screen bg-[#080808] text-white flex flex-col">
-
-      {/* Grain overlay */}
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0 opacity-[0.03]"
@@ -447,17 +452,12 @@ export default function HomePage() {
           backgroundSize: "128px 128px",
         }}
       />
-      {/* Ambient glow */}
       <div
         aria-hidden
         className="pointer-events-none fixed top-0 left-0 w-[600px] h-[600px] rounded-full bg-[#F5C542] opacity-[0.04] blur-[120px] z-0"
       />
 
       <div className="relative z-10 flex flex-col flex-1 max-w-6xl mx-auto w-full px-6 py-12">
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Header                                                            */}
-        {/* ---------------------------------------------------------------- */}
         <header className="mb-14">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-[#F5C542] text-xs font-mono tracking-[0.3em] uppercase">
@@ -482,15 +482,11 @@ export default function HomePage() {
             </span>
           </h1>
 
-          {/* Subtitle */}
           <p className="text-[#666] text-xs font-mono tracking-[0.22em] uppercase">
             Tracking historical classical records from January 2018.
           </p>
         </header>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Search bar                                                        */}
-        {/* ---------------------------------------------------------------- */}
         <section className="mb-12">
           <label className="block text-xs font-mono text-[#777] tracking-[0.2em] uppercase mb-3">
             Players — comma-separated
@@ -530,27 +526,18 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Error banner                                                      */}
-        {/* ---------------------------------------------------------------- */}
         {error && (
           <div className="mb-8 px-5 py-4 rounded-xl border border-red-900/50 bg-red-950/30 text-red-400 text-sm font-mono">
             ⚠ {error}
           </div>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Empty state                                                       */}
-        {/* ---------------------------------------------------------------- */}
         {hasSearched && !loading && !error && players.length === 0 && (
           <div className="text-center py-24 text-[#444] font-mono text-xs tracking-[0.3em] uppercase">
             No players found — try a shorter name fragment.
           </div>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* ECharts chart                                                     */}
-        {/* ---------------------------------------------------------------- */}
         {players.length > 0 && (
           <section className="mb-12">
             <div className="flex items-center gap-3 mb-6">
@@ -571,9 +558,6 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Summary table                                                     */}
-        {/* ---------------------------------------------------------------- */}
         {summaries.length > 0 && (
           <section className="mb-16">
             <div className="flex items-center gap-3 mb-6">
@@ -610,7 +594,6 @@ export default function HomePage() {
                       key={s.fide_id}
                       className="border-b border-[#131313] last:border-0 hover:bg-[#0f0f0f] transition-colors"
                     >
-                      {/* Name + palette swatch */}
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
                           <span
@@ -623,12 +606,10 @@ export default function HomePage() {
                         </div>
                       </td>
 
-                      {/* FIDE ID */}
                       <td className="px-6 py-5 text-right font-mono text-[#555] text-xs">
                         {s.fide_id}
                       </td>
 
-                      {/* Current rating — colour-coded by tier */}
                       <td className="px-6 py-5 text-right">
                         <span
                           className="font-mono font-bold text-base"
@@ -645,7 +626,6 @@ export default function HomePage() {
                         </span>
                       </td>
 
-                      {/* Peak world rank */}
                       <td className="px-6 py-5 text-right font-mono text-[#666]">
                         {s.peakWorldRank !== null ? (
                           <>
@@ -664,12 +644,8 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* spacer */}
         <div className="flex-1" />
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Footer                                                            */}
-        {/* ---------------------------------------------------------------- */}
         <footer className="border-t border-[#131313] pt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <span className="text-xs font-mono text-[#555] tracking-[0.3em] uppercase">
             FIDE Rating Chronicle
