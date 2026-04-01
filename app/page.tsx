@@ -174,7 +174,14 @@ function buildChartOption(players: ResolvedPlayer[]) {
         data: [{ yAxis: 2700 }],
       },
     }),
-    data: player.rows.map((r) => [r.date, r.rating]),
+    data: player.rows.map((r) => [
+      r.date, 
+      r.rating, 
+      r.world_rank, 
+      r.national_rank, 
+      r.world_women_rank, 
+      r.national_women_rank
+    ]),
   }));
 
   return {
@@ -185,7 +192,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
 
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#0d0d0d",
+      backgroundColor: "rgba(13, 13, 13, 0.95)",
       borderColor: "#252525",
       borderWidth: 1,
       padding: [12, 16],
@@ -198,7 +205,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
         params: {
           axisValue: string;
           seriesName: string;
-          value: [string, number];
+          value: [string, number, number | null, number | null, number | null, number | null];
           color: string;
         }[]
       ) => {
@@ -208,19 +215,38 @@ function buildChartOption(players: ResolvedPlayer[]) {
           typeof raw === "string" && raw.length >= 7
             ? raw.slice(0, 7)
             : new Date(Number(raw)).toISOString().slice(0, 7);
-        const rows = params
-          .map(
-            (p) =>
-              `<div style="display:flex;align-items:center;gap:8px;margin-top:5px;">
-                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${p.color};flex-shrink:0"></span>
-                <span style="color:#888;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.seriesName}</span>
-                <span style="margin-left:auto;padding-left:16px;font-weight:700;color:${p.color};">${p.value[1]}</span>
-              </div>`
-          )
+
+        const rowsHtml = params
+          .map((p) => {
+            const [_, rating, wRank, nRank, wwRank, nwRank] = p.value;
+            
+            // Format the rank text dynamically based on gender/category
+            let rankText = "";
+            if (wwRank && nwRank) {
+              rankText = `WR (Women): #${wwRank} &nbsp;|&nbsp; NR: #${nwRank}`;
+            } else if (wRank && nRank) {
+              rankText = `WR: #${wRank} &nbsp;|&nbsp; NR: #${nRank}`;
+            } else {
+              rankText = "Ranks unavailable";
+            }
+
+            return `
+              <div style="margin-top:10px; padding-bottom:10px; border-bottom:1px solid #1a1a1a;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${p.color};flex-shrink:0"></span>
+                  <span style="color:#e5e7eb;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.seriesName}</span>
+                  <span style="margin-left:auto;padding-left:16px;font-weight:700;color:${p.color};">${rating}</span>
+                </div>
+                <div style="margin-left:15px; margin-top:4px; font-size:10px; color:#666; letter-spacing:0.05em;">
+                  ${rankText}
+                </div>
+              </div>`;
+          })
           .join("");
-        return `<div style="font-family:monospace;min-width:200px;">
-          <div style="color:#444;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px;">${label}</div>
-          ${rows}
+
+        return `<div style="font-family:monospace;min-width:240px;">
+          <div style="color:#888;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px; border-bottom:1px solid #333; padding-bottom:6px;">${label}</div>
+          ${rowsHtml}
         </div>`;
       },
     },
