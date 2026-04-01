@@ -93,7 +93,6 @@ function resolveCanonicalPlayers(
     const candidates: { fide_id: number; peakRating: number }[] = [];
 
     for (const [fide_id, playerRows] of byId.entries()) {
-      // FIX: Order-agnostic word matching on the frontend so DB results aren't dropped
       const matches = numeric
         ? fide_id === Number(term)
         : playerRows.some((r) => {
@@ -220,7 +219,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
           .map((p) => {
             const [_, rating, wRank, nRank, wwRank, nwRank] = p.value;
             
-            // Format the rank text dynamically based on gender/category
             let rankText = "";
             if (wwRank && nwRank) {
               rankText = `WR (Women): #${wwRank} &nbsp;|&nbsp; NR: #${nwRank}`;
@@ -264,7 +262,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
     grid: {
       top: 44,
       left: 8,
-      right: 16,
+      right: 48, // Increased right padding to fit the vertical slider
       bottom: 72,
       containLabel: true,
     },
@@ -305,6 +303,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
     },
 
     dataZoom: [
+      // Horizontal Inside Zoom
       {
         type: "inside",
         xAxisIndex: 0,
@@ -314,6 +313,15 @@ function buildChartOption(players: ResolvedPlayer[]) {
         preventDefaultMouseMove: false,
         minSpan: 5,
       },
+      // Vertical Inside Zoom
+      {
+        type: "inside",
+        yAxisIndex: 0,
+        filterMode: "none",
+        zoomOnMouseWheel: true,
+        moveOnMouseMove: true,
+      },
+      // Horizontal Slider
       {
         type: "slider",
         xAxisIndex: 0,
@@ -349,6 +357,30 @@ function buildChartOption(players: ResolvedPlayer[]) {
           moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
         },
       },
+      // Vertical Slider
+      {
+        type: "slider",
+        yAxisIndex: 0,
+        filterMode: "none",
+        width: 22,
+        right: 10,
+        borderColor: "transparent",
+        backgroundColor: "#0a0a0a",
+        fillerColor: "rgba(245,197,66,0.07)",
+        handleStyle: {
+          color: "#1a1a1a",
+          borderColor: "#F5C542",
+          borderWidth: 1,
+          shadowBlur: 4,
+          shadowColor: "rgba(245,197,66,0.25)",
+        },
+        moveHandleStyle: { color: "#F5C542", opacity: 0.4 },
+        textStyle: { show: false }, // Hides labels to keep the right side clean
+        emphasis: {
+          handleStyle: { borderColor: "#F5C542", shadowBlur: 8 },
+          moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
+        },
+      }
     ],
 
     series,
