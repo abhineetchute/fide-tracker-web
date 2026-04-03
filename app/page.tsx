@@ -209,11 +209,10 @@ function buildChartOption(players: ResolvedPlayer[]) {
         }[]
       ) => {
         if (!Array.isArray(params) || !params.length) return "";
-        const raw = params[0].axisValue;
-        const label =
-          typeof raw === "string" && raw.length >= 7
-            ? raw.slice(0, 7)
-            : new Date(Number(raw)).toISOString().slice(0, 7);
+        
+        // Grab the exact YYYY-MM string directly from the database value to bypass timezone shifting
+        const dateString = params[0].value[0]; 
+        const label = dateString.substring(0, 7);
 
         const rowsHtml = params
           .map((p) => {
@@ -262,7 +261,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
     grid: {
       top: 44,
       left: 8,
-      right: 48, // Increased right padding to fit the vertical slider
+      right: 48,
       bottom: 72,
       containLabel: true,
     },
@@ -279,6 +278,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
         hideOverlap: true,
         margin: 14,
         formatter: (val: number) => {
+          // Axis labels can safely use the Date object for general positioning
           const d = new Date(val);
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         },
@@ -303,7 +303,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
     },
 
     dataZoom: [
-      // Horizontal Inside Zoom
       {
         type: "inside",
         xAxisIndex: 0,
@@ -313,7 +312,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
         preventDefaultMouseMove: false,
         minSpan: 5,
       },
-      // Vertical Inside Zoom
       {
         type: "inside",
         yAxisIndex: 0,
@@ -321,7 +319,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
         zoomOnMouseWheel: true,
         moveOnMouseMove: true,
       },
-      // Horizontal Slider
       {
         type: "slider",
         xAxisIndex: 0,
@@ -357,7 +354,6 @@ function buildChartOption(players: ResolvedPlayer[]) {
           moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
         },
       },
-      // Vertical Slider
       {
         type: "slider",
         yAxisIndex: 0,
@@ -375,7 +371,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
           shadowColor: "rgba(245,197,66,0.25)",
         },
         moveHandleStyle: { color: "#F5C542", opacity: 0.4 },
-        textStyle: { show: false }, // Hides labels to keep the right side clean
+        textStyle: { show: false },
         emphasis: {
           handleStyle: { borderColor: "#F5C542", shadowBlur: 8 },
           moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
