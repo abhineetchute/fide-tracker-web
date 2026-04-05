@@ -42,17 +42,17 @@ interface ResolvedPlayer {
 }
 
 // ---------------------------------------------------------------------------
-// Colour palette — cinematic amber / ember / ice
+// Colour palette — sleek cinematic teal / electric blue
 // ---------------------------------------------------------------------------
 const PALETTE = [
-  "#F5C542",
-  "#E07B54",
-  "#7EC8E3",
-  "#A3E4D7",
-  "#D7A2F5",
-  "#F5A3C7",
-  "#8BE38B",
-  "#F5855A",
+  "#00E5FF", // Cyan/Teal
+  "#2979FF", // Electric Blue
+  "#B388FF", // Soft Purple
+  "#00E676", // Neon Green
+  "#FF3D00", // Sharp Orange
+  "#F50057", // Deep Pink
+  "#1DE9B6", // Aqua
+  "#FFEA00", // Yellow
 ];
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ function buildChartOption(players: ResolvedPlayer[]) {
         symbol: "none",
         animation: false,
         lineStyle: {
-          color: "#F5C542",
+          color: "#00E5FF",
           type: "dashed",
           width: 1,
           opacity: 0.4,
@@ -162,12 +162,12 @@ function buildChartOption(players: ResolvedPlayer[]) {
           show: true,
           position: "insideEndTop",
           formatter: "Super GM · 2700",
-          color: "#F5C542",
-          opacity: 0.6,
+          color: "#00E5FF",
+          opacity: 0.8,
           fontSize: 10,
           fontFamily: "monospace",
           padding: [3, 7],
-          backgroundColor: "rgba(245,197,66,0.07)",
+          backgroundColor: "rgba(0,229,255,0.07)",
           borderRadius: 3,
         },
         data: [{ yAxis: 2700 }],
@@ -327,18 +327,18 @@ function buildChartOption(players: ResolvedPlayer[]) {
         bottom: 10,
         borderColor: "transparent",
         backgroundColor: "#0a0a0a",
-        fillerColor: "rgba(245,197,66,0.07)",
+        fillerColor: "rgba(0,229,255,0.07)",
         handleStyle: {
           color: "#1a1a1a",
-          borderColor: "#F5C542",
+          borderColor: "#00E5FF",
           borderWidth: 1,
           shadowBlur: 4,
-          shadowColor: "rgba(245,197,66,0.25)",
+          shadowColor: "rgba(0,229,255,0.25)",
         },
-        moveHandleStyle: { color: "#F5C542", opacity: 0.4 },
+        moveHandleStyle: { color: "#00E5FF", opacity: 0.4 },
         selectedDataBackground: {
-          lineStyle: { color: "#F5C542", opacity: 0.25, width: 1 },
-          areaStyle: { color: "#F5C542", opacity: 0.03 },
+          lineStyle: { color: "#00E5FF", opacity: 0.25, width: 1 },
+          areaStyle: { color: "#00E5FF", opacity: 0.03 },
         },
         dataBackground: {
           lineStyle: { color: "#1e1e1e", width: 1 },
@@ -350,8 +350,8 @@ function buildChartOption(players: ResolvedPlayer[]) {
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         },
         emphasis: {
-          handleStyle: { borderColor: "#F5C542", shadowBlur: 8 },
-          moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
+          handleStyle: { borderColor: "#00E5FF", shadowBlur: 8 },
+          moveHandleStyle: { color: "#00E5FF", opacity: 0.7 },
         },
       },
       {
@@ -362,19 +362,19 @@ function buildChartOption(players: ResolvedPlayer[]) {
         right: 10,
         borderColor: "transparent",
         backgroundColor: "#0a0a0a",
-        fillerColor: "rgba(245,197,66,0.07)",
+        fillerColor: "rgba(0,229,255,0.07)",
         handleStyle: {
           color: "#1a1a1a",
-          borderColor: "#F5C542",
+          borderColor: "#00E5FF",
           borderWidth: 1,
           shadowBlur: 4,
-          shadowColor: "rgba(245,197,66,0.25)",
+          shadowColor: "rgba(0,229,255,0.25)",
         },
-        moveHandleStyle: { color: "#F5C542", opacity: 0.4 },
+        moveHandleStyle: { color: "#00E5FF", opacity: 0.4 },
         textStyle: { show: false },
         emphasis: {
-          handleStyle: { borderColor: "#F5C542", shadowBlur: 8 },
-          moveHandleStyle: { color: "#F5C542", opacity: 0.7 },
+          handleStyle: { borderColor: "#00E5FF", shadowBlur: 8 },
+          moveHandleStyle: { color: "#00E5FF", opacity: 0.7 },
         },
       }
     ],
@@ -508,16 +508,16 @@ export default function HomePage() {
       />
       <div
         aria-hidden
-        className="pointer-events-none fixed top-0 left-0 w-[600px] h-[600px] rounded-full bg-[#F5C542] opacity-[0.04] blur-[120px] z-0"
+        className="pointer-events-none fixed top-0 left-0 w-[600px] h-[600px] rounded-full bg-[#00E5FF] opacity-[0.04] blur-[120px] z-0"
       />
 
       <div className="relative z-10 flex flex-col flex-1 max-w-6xl mx-auto w-full px-6 py-12">
         <header className="mb-14">
           <div className="flex items-center gap-3 mb-4">
-            <span className="text-[#F5C542] text-xs font-mono tracking-[0.3em] uppercase">
+            <span className="text-[#00E5FF] text-xs font-mono tracking-[0.3em] uppercase">
               FIDE · ELO TRACKER
             </span>
-            <span className="h-px flex-1 bg-gradient-to-r from-[#F5C542]/30 to-transparent" />
+            <span className="h-px flex-1 bg-gradient-to-r from-[#00E5FF]/30 to-transparent" />
           </div>
 
           <h1
@@ -529,7 +529,7 @@ export default function HomePage() {
               className="text-transparent bg-clip-text"
               style={{
                 backgroundImage:
-                  "linear-gradient(135deg, #F5C542 0%, #E07B54 100%)",
+                  "linear-gradient(135deg, #00E5FF 0%, #2979FF 100%)",
               }}
             >
               Chronicle
@@ -552,7 +552,7 @@ export default function HomePage() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Gukesh D, Praggnanandhaa R, 5202213"
-              className="flex-1 bg-[#111] border border-[#222] rounded-xl px-5 py-4 text-white text-sm placeholder-[#2e2e2e] focus:outline-none focus:border-[#F5C542]/50 focus:ring-1 focus:ring-[#F5C542]/20 transition-all font-mono"
+              className="flex-1 bg-[#111] border border-[#222] rounded-xl px-5 py-4 text-white text-sm placeholder-[#2e2e2e] focus:outline-none focus:border-[#00E5FF]/50 focus:ring-1 focus:ring-[#00E5FF]/20 transition-all font-mono"
             />
             <button
               onClick={handleSearch}
@@ -561,7 +561,7 @@ export default function HomePage() {
               style={{
                 background: loading
                   ? "#181818"
-                  : "linear-gradient(135deg, #F5C542 0%, #E07B54 100%)",
+                  : "linear-gradient(135deg, #00E5FF 0%, #2979FF 100%)",
                 color: loading ? "#444" : "#0d0d0d",
               }}
             >
@@ -670,9 +670,9 @@ export default function HomePage() {
                           style={{
                             color:
                               s.currentRating >= 2700
-                                ? "#F5C542"
+                                ? "#00E5FF"
                                 : s.currentRating >= 2600
-                                ? "#E07B54"
+                                ? "#2979FF"
                                 : "#aaa",
                           }}
                         >
